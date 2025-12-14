@@ -1,21 +1,242 @@
-// Almacenamiento de canciones
+// Inicializar Supabase
+let supabase;
+let currentBand = null;
+
+// Inicializar Supabase si las credenciales están configuradas
+if (SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey) {
+    supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+} else {
+    console.error('❌ Las credenciales de Supabase no están configuradas en config.js');
+}
+
+// Variables globales
 let songs = [];
 let currentMetronome = null;
 let audioContext = null;
 let searchFilter = '';
 
-// Cargar canciones del localStorage al iniciar
-function loadSongs() {
-    const stored = localStorage.getItem('metronomeSongs');
-    if (stored) {
-        songs = JSON.parse(stored);
+// Verificar si hay una sesión activa al cargar
+document.addEventListener('DOMContentLoaded', () => {
+    const savedBand = localStorage.getItem('currentBand');
+    if (savedBand) {
+        try {
+            currentBand = JSON.parse(savedBand);
+            showApp();
+            loadSongs();
+        } catch (e) {
+            console.error('Error al cargar sesión:', e);
+            showLogin();
+        }
+    } else {
+        showLogin();
+    }
+});
+
+// Mostrar pantalla de login
+function showLogin() {
+    document.getElementById('loginScreen').classList.remove('hidden');
+    document.getElementById('appScreen').classList.add('hidden');
+    currentBand = null;
+    localStorage.removeItem('currentBand');
+}
+
+// Mostrar aplicación principal
+function showApp() {
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('appScreen').classList.remove('hidden');
+    if (currentBand) {
+        document.getElementById('currentBandName').textContent = `Banda: ${currentBand.name}`;
+    }
+}
+
+// Autenticación con banda
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const bandName = document.getElementById('bandName').value.trim();
+    const bandKey = document.getElementById('bandKey').value.trim();
+    const errorDiv = document.getElementById('loginError');
+    const errorText = document.getElementById('loginErrorText');
+    const loginButton = document.getElementById('loginButton');
+    const loginButtonText = document.getElementById('loginButtonText');
+    const loginButtonSpinner = document.getElementById('loginButtonSpinner');
+    
+    // Ocultar error previo
+    errorDiv.classList.add('hidden');
+    
+    // Validación básica
+    if (!bandName || !bandKey) {
+        errorText.textContent = 'Por favor, completa todos los campos';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    if (!supabase) {
+        errorText.textContent = 'Error: Supabase no está configurado. Por favor, configura config.js';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    // Mostrar estado de carga
+    loginButton.disabled = true;
+    loginButtonText.textContent = 'Iniciando sesión...';
+    loginButtonSpinner.classList.remove('hidden');
+    
+    try {
+        // Buscar la banda por nombre
+        const { data: bands, error } = await supabase
+            .from('bands')
+            .select('*')
+            .eq('name', bandName)
+            .single();
+        
+        if (error || !bands) {
+            errorText.textContent = 'Nombre de banda o contraseña incorrectos';
+            errorDiv.classList.remove('hidden');
+            resetLoginButton();
+            return;
+        }
+        
+        // Verificar la contraseña (asumiendo que hay un campo 'key' o 'password' en la tabla bands)
+        // Ajusta esto según la estructura real de tu tabla
+        if (bands.key !== bandKey && bands.password !== bandKey) {
+            errorText.textContent = 'Nombre de banda o contraseña incorrectos';
+            errorDiv.classList.remove('hidden');
+            resetLoginButton();
+            return;
+        }
+        
+        // Autenticación exitosa
+        currentBand = {
+            id: bands.id,
+            name: bands.name
+        };
+        
+        localStorage.setItem('currentBand', JSON.stringify(currentBand));
+        errorDiv.classList.add('hidden');
+        
+        // Pequeño delay para mostrar el éxito
+        loginButtonText.textContent = '¡Bienvenido!';
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        showApp();
+        loadSongs();
+        
+    } catch (err) {
+        console.error('Error en autenticación:', err);
+        errorText.textContent = 'Error al iniciar sesión. Por favor, intenta de nuevo.';
+        errorDiv.classList.remove('hidden');
+        resetLoginButton();
+    }
+    
+    function resetLoginButton() {
+        loginButton.disabled = false;
+        loginButtonText.textContent = 'Iniciar Sesión';
+        loginButtonSpinner.classList.add('hidden');
+    }
+});
+
+// Cerrar sesión
+document.getElementById('logoutBtn').addEventListener('click', () => {
+    if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
+        showLogin();
+        songs = [];
+        renderSongs();
+    }
+});
+
+// Cargar canciones desde Supabase
+async function loadSongs() {
+    if (!supabase || !currentBand) {
+        songs = [];
+        renderSongs();
+        return;
+    }
+    
+    try {
+        const { data, error } = await supabase
+            .from('songs')
+            .select('*')
+            .eq('band_id', currentBand.id)
+            .order('name', { ascending: true });
+        
+        if (error) {
+            console.error('Error al cargar canciones:', error);
+            songs = [];
+        } else {
+            songs = data || [];
+        }
+        
+        renderSongs();
+    } catch (err) {
+        console.error('Error al cargar canciones:', err);
+        songs = [];
         renderSongs();
     }
 }
 
-// Guardar canciones en localStorage
-function saveSongs() {
-    localStorage.setItem('metronomeSongs', JSON.stringify(songs));
+// Guardar canción en Supabase
+async function saveSong(song) {
+    if (!supabase || !currentBand) {
+        console.error('No hay conexión a Supabase o no hay banda autenticada');
+        return false;
+    }
+    
+    try {
+        const { data, error } = await supabase
+            .from('songs')
+            .insert([
+                {
+                    name: song.name,
+                    group: song.group || null,
+                    bpm: song.bpm,
+                    time_signature: song.timeSignature,
+                    band_id: currentBand.id
+                }
+            ])
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('Error al guardar canción:', error);
+            alert('Error al guardar la canción. Por favor, intenta de nuevo.');
+            return false;
+        }
+        
+        return true;
+    } catch (err) {
+        console.error('Error al guardar canción:', err);
+        alert('Error al guardar la canción. Por favor, intenta de nuevo.');
+        return false;
+    }
+}
+
+// Eliminar canción de Supabase
+async function deleteSongFromDB(songId) {
+    if (!supabase || !currentBand) {
+        console.error('No hay conexión a Supabase o no hay banda autenticada');
+        return false;
+    }
+    
+    try {
+        const { error } = await supabase
+            .from('songs')
+            .delete()
+            .eq('id', songId)
+            .eq('band_id', currentBand.id); // Asegurar que solo se eliminen canciones de la banda actual
+        
+        if (error) {
+            console.error('Error al eliminar canción:', error);
+            alert('Error al eliminar la canción. Por favor, intenta de nuevo.');
+            return false;
+        }
+        
+        return true;
+    } catch (err) {
+        console.error('Error al eliminar canción:', err);
+        alert('Error al eliminar la canción. Por favor, intenta de nuevo.');
+        return false;
+    }
 }
 
 // Renderizar lista de canciones ordenada alfabéticamente
@@ -58,7 +279,6 @@ function renderSongs() {
     );
     
     songsList.innerHTML = sortedSongs.map((song, index) => {
-        const originalIndex = songs.findIndex(s => s.id === song.id);
         return `
             <div class="flex flex-col md:flex-row md:items-center md:justify-between p-3 md:p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition gap-3">
                 <div class="flex-1 min-w-0">
@@ -67,18 +287,18 @@ function renderSongs() {
                         ${song.group ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">${escapeHtml(song.group)}</span>` : ''}
                     </div>
                     <p class="text-xs md:text-sm text-gray-600 mt-1">
-                        ${song.bpm} BPM • Compás ${song.timeSignature}
+                        ${song.bpm} BPM • Compás ${song.time_signature || song.timeSignature}
                     </p>
                 </div>
                 <div class="flex items-center gap-2 md:space-x-2 flex-shrink-0">
                     <button 
-                        onclick="playMetronome(${originalIndex})"
+                        onclick="playMetronome(${song.id})"
                         class="flex-1 md:flex-none px-3 md:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium text-sm md:text-base"
                     >
                         ▶ Play
                     </button>
                     <button 
-                        onclick="deleteSong(${originalIndex})"
+                        onclick="deleteSong('${song.id}')"
                         class="px-3 md:px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm md:text-base"
                         aria-label="Eliminar canción"
                     >
@@ -98,8 +318,14 @@ function escapeHtml(text) {
 }
 
 // Agregar nueva canción
-document.getElementById('songForm').addEventListener('submit', (e) => {
+document.getElementById('songForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    
+    if (!currentBand) {
+        alert('Por favor, inicia sesión primero');
+        showLogin();
+        return;
+    }
     
     const name = document.getElementById('songName').value.trim();
     const group = document.getElementById('group').value.trim();
@@ -109,40 +335,43 @@ document.getElementById('songForm').addEventListener('submit', (e) => {
     // Validar que todos los campos obligatorios estén completos
     if (name && bpm >= 30 && bpm <= 300 && timeSignature) {
         const newSong = {
-            id: Date.now(),
             name: name,
             group: group || '', // El grupo es opcional
             bpm: bpm,
             timeSignature: timeSignature
         };
         
-        songs.push(newSong);
-        saveSongs();
-        renderSongs();
-        
-        // Limpiar formulario
-        document.getElementById('songForm').reset();
-        document.getElementById('timeSignature').value = '4/4';
+        const success = await saveSong(newSong);
+        if (success) {
+            // Recargar canciones desde Supabase
+            await loadSongs();
+            
+            // Limpiar formulario
+            document.getElementById('songForm').reset();
+            document.getElementById('timeSignature').value = '4/4';
+        }
     }
 });
 
 // Eliminar canción
-function deleteSong(index) {
+async function deleteSong(songId) {
     if (confirm('¿Estás seguro de que deseas eliminar esta canción?')) {
-        songs.splice(index, 1);
-        saveSongs();
-        renderSongs();
+        const success = await deleteSongFromDB(songId);
+        if (success) {
+            await loadSongs();
+        }
     }
 }
 
 // Reproducir metrónomo
-function playMetronome(index) {
+function playMetronome(songId) {
     // Detener metrónomo actual si hay uno activo
     if (currentMetronome) {
         stopMetronome();
     }
     
-    const song = songs[index];
+    // Buscar la canción por ID
+    const song = songs.find(s => s.id === songId || s.id === parseInt(songId));
     if (!song) return;
     
     // Inicializar AudioContext si no existe
@@ -154,7 +383,8 @@ function playMetronome(index) {
     const intervalMs = (60 / song.bpm) * 1000;
     
     // Parsear compás (ej: "4/4" -> beatsPerMeasure = 4)
-    const [beatsPerMeasure] = song.timeSignature.split('/').map(Number);
+    const timeSig = song.time_signature || song.timeSignature;
+    const [beatsPerMeasure] = timeSig.split('/').map(Number);
     
     let beatCount = 0;
     let isPlaying = true;
@@ -195,7 +425,7 @@ function playMetronome(index) {
         
         // Actualizar información
         document.getElementById('activeSongInfo').textContent = 
-            `${song.name} - ${song.bpm} BPM (${song.timeSignature})`;
+            `${song.name} - ${song.bpm} BPM (${timeSig})`;
         
         // Programar siguiente tick
         currentMetronome = setTimeout(tick, intervalMs);
@@ -233,7 +463,3 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
     searchFilter = e.target.value;
     renderSongs();
 });
-
-// Cargar canciones al iniciar
-loadSongs();
-
