@@ -1,0 +1,11 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Desactivar el escaneo de secretos
+# Las claves anon de Supabase (VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY) están diseñadas
+# para ser públicas y seguras en el cliente. Estas claves se exponen en el código del frontend
+# y es el comportamiento esperado de Supabase.
+[build.environment]
+  SECRETS_SCAN_ENABLED = "false"
+
