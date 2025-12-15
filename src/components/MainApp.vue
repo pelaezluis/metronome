@@ -13,7 +13,7 @@
           </button>
         </div>
         <p class="text-sm md:text-base text-gray-600 px-2">Gestiona tus canciones y practica con el metrónomo</p>
-        <p class="text-sm text-indigo-600 mt-2 font-medium">Banda: {{ currentBand.name }}</p>
+        <p class="text-sm text-indigo-600 mt-2 font-medium">Banda: {{ capitalizeFirst(currentBand.name) }}</p>
       </header>
 
       <!-- Formulario para agregar canciones -->
@@ -31,19 +31,6 @@
               required
               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-base"
               placeholder="Ej: Canción en Do Mayor"
-            >
-          </div>
-          
-          <div>
-            <label for="group" class="block text-sm font-medium text-gray-700 mb-1">
-              Grupo (Tu banda)
-            </label>
-            <input 
-              v-model="form.group"
-              type="text" 
-              id="group" 
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-base"
-              placeholder="Ej: Banda de Jazz, Orquesta, etc."
             >
           </div>
           
@@ -128,26 +115,33 @@
             class="flex flex-col md:flex-row md:items-center md:justify-between p-3 md:p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition gap-3"
           >
             <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
-                <h3 class="font-semibold text-gray-800 text-base md:text-lg truncate">{{ song.name }}</h3>
-                <span 
-                  v-if="song.group" 
-                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800"
-                >
-                  {{ song.group }}
-                </span>
-              </div>
+              <h3 class="font-semibold text-gray-800 text-base md:text-lg truncate">{{ song.name }}</h3>
               <p class="text-xs md:text-sm text-gray-600 mt-1">
-                {{ song.bpm }} BPM • Compás {{ song.time_signature || song.timeSignature }}
+                {{ song.bpm }} BPM • Compás {{ song.compas || song.time_signature || song.timeSignature }}
               </p>
             </div>
             <div class="flex items-center gap-2 md:space-x-2 flex-shrink-0">
               <button 
-                @click="playMetronome(song)"
-                class="flex-1 md:flex-none px-3 md:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium text-sm md:text-base"
+                @click="isPlaying && currentSong?.id === song.id ? stopMetronome() : playMetronome(song)"
+                :class="[
+                  'flex-1 md:flex-none px-3 md:px-4 py-2 rounded-lg transition font-medium text-sm md:text-base',
+                  isPlaying && currentSong?.id === song.id
+                    ? 'bg-red-600 text-white hover:bg-red-700'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                ]"
               >
-                ▶ Play
+                <span v-if="isPlaying && currentSong?.id === song.id">⏸ Detener</span>
+                <span v-else>▶ Play</span>
               </button>
+              <label class="flex items-center gap-1.5 cursor-pointer px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition" title="Primer tiempo diferente">
+                <input 
+                  type="checkbox" 
+                  v-model="accentFirstBeat"
+                  @change="saveAccentPreference"
+                  class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                >
+                <span class="text-xs text-gray-600">Acento</span>
+              </label>
               <button 
                 @click="handleDelete(song.id)"
                 class="px-3 md:px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm md:text-base"
@@ -199,7 +193,6 @@ const emit = defineEmits(['logout'])
 // Formulario
 const form = reactive({
   name: '',
-  group: '',
   bpm: 120,
   timeSignature: '4/4'
 })
@@ -207,13 +200,25 @@ const form = reactive({
 // Composable de canciones
 const { songs, loading, searchFilter, filteredSongs, loadSongs, saveSong, deleteSong } = useSongs(props.currentBand.id)
 
-// Composable de metrónomo
-const { isPlaying, currentSong, play, stop } = useMetronome()
+// Opción de acento en primer tiempo (cargar desde localStorage)
+const accentFirstBeat = ref(true) // Por defecto activado
 
-// Cargar canciones al montar
+// Cargar preferencia desde localStorage
 onMounted(() => {
   loadSongs()
+  const saved = localStorage.getItem('metronome_accent_first_beat')
+  if (saved !== null) {
+    accentFirstBeat.value = saved === 'true'
+  }
 })
+
+// Guardar preferencia en localStorage
+const saveAccentPreference = () => {
+  localStorage.setItem('metronome_accent_first_beat', accentFirstBeat.value.toString())
+}
+
+// Composable de metrónomo
+const { isPlaying, currentSong, play, stop } = useMetronome()
 
 // Manejar submit del formulario
 const handleSubmit = async () => {
@@ -228,15 +233,13 @@ const handleSubmit = async () => {
 
   const success = await saveSong({
     name: form.name.trim(),
-    group: form.group.trim(),
     bpm: form.bpm,
-    timeSignature: form.timeSignature
+    compas: form.timeSignature
   })
 
   if (success) {
     // Limpiar formulario
     form.name = ''
-    form.group = ''
     form.bpm = 120
     form.timeSignature = '4/4'
   }
@@ -251,7 +254,7 @@ const handleDelete = async (songId) => {
 
 // Reproducir metrónomo
 const playMetronome = (song) => {
-  play(song)
+  play(song, accentFirstBeat.value)
 }
 
 // Detener metrónomo
@@ -263,6 +266,12 @@ const stopMetronome = () => {
 const handleLogout = () => {
   stop()
   emit('logout')
+}
+
+// Capitalizar primera letra
+const capitalizeFirst = (str) => {
+  if (!str) return ''
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
 }
 </script>
 

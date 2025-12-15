@@ -12,7 +12,7 @@ export function useMetronome() {
     }
   }
 
-  const play = (song) => {
+  const play = (song, accentFirstBeat = true) => {
     // Detener si hay uno activo
     stop()
 
@@ -25,8 +25,8 @@ export function useMetronome() {
     // Calcular intervalo en milisegundos
     const intervalMs = (60 / song.bpm) * 1000
 
-    // Parsear compás
-    const timeSig = song.time_signature || song.timeSignature
+    // Parsear compás (aceptar diferentes nombres de campo)
+    const timeSig = song.compas || song.time_signature || song.timeSignature
     const [beatsPerMeasure] = timeSig.split('/').map(Number)
 
     let beatCount = 0
@@ -36,10 +36,13 @@ export function useMetronome() {
 
       beatCount++
 
-      // Sonido más fuerte en el primer beat del compás
+      // Determinar si es el primer beat del compás
       const isFirstBeat = (beatCount % beatsPerMeasure === 1) || beatCount === 1
-      const frequency = isFirstBeat ? 800 : 400
-      const duration = isFirstBeat ? 0.1 : 0.05
+      
+      // Si accentFirstBeat está activado, el primer beat suena diferente
+      // Si está desactivado, todos los beats suenan igual
+      const frequency = (accentFirstBeat && isFirstBeat) ? 800 : 400
+      const duration = (accentFirstBeat && isFirstBeat) ? 0.1 : 0.05
 
       // Generar tono
       const oscillator = audioContext.value.createOscillator()
