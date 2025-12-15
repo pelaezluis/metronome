@@ -39,10 +39,18 @@ export function useMetronome() {
       // Determinar si es el primer beat del compás
       const isFirstBeat = (beatCount % beatsPerMeasure === 1) || beatCount === 1
       
-      // Si accentFirstBeat está activado, el primer beat suena diferente
-      // Si está desactivado, todos los beats suenan igual
-      const frequency = (accentFirstBeat && isFirstBeat) ? 800 : 400
-      const duration = (accentFirstBeat && isFirstBeat) ? 0.1 : 0.05
+      // Si accentFirstBeat está activado, el primer beat suena diferente (más fuerte)
+      // Si está desactivado, todos los beats suenan con el sonido del acento (más fuerte)
+      let frequency, duration
+      if (accentFirstBeat) {
+        // Acento activado: primer beat diferente, resto normal
+        frequency = isFirstBeat ? 800 : 400
+        duration = isFirstBeat ? 0.1 : 0.05
+      } else {
+        // Acento desactivado: todos los beats usan el sonido del acento
+        frequency = 800
+        duration = 0.1
+      }
 
       // Generar tono
       const oscillator = audioContext.value.createOscillator()
