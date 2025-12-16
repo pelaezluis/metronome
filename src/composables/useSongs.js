@@ -1,98 +1,88 @@
-import { ref, computed } from 'vue'
-import supabase from '../config/supabase'
+import { ref, computed } from "vue";
+import supabase from "../config/supabase";
 
 export function useSongs(bandId) {
-  const songs = ref([])
-  const loading = ref(false)
-  const searchFilter = ref('')
+  const songs = ref([]);
+  const loading = ref(false);
+  const searchFilter = ref("");
 
-  // Clave para localStorage
-  const getStorageKey = () => `songs_${bandId}`
+  const getStorageKey = () => `songs_${bandId}`;
 
-  // Guardar canciones en localStorage
   const saveToLocalStorage = (songsData) => {
     try {
-      localStorage.setItem(getStorageKey(), JSON.stringify(songsData))
+      localStorage.setItem(getStorageKey(), JSON.stringify(songsData));
     } catch (err) {
-      console.error('Error al guardar en localStorage:', err)
+      // ...existing code...
     }
-  }
+  };
 
-  // Cargar canciones desde localStorage
   const loadFromLocalStorage = () => {
     try {
-      const stored = localStorage.getItem(getStorageKey())
+      const stored = localStorage.getItem(getStorageKey());
       if (stored) {
-        return JSON.parse(stored)
+        return JSON.parse(stored);
       }
     } catch (err) {
-      console.error('Error al cargar desde localStorage:', err)
+      // console.error("Error al cargar desde localStorage:", err);
     }
-    return []
-  }
+    return [];
+  };
 
-  // Canciones filtradas y ordenadas
   const filteredSongs = computed(() => {
-    let filtered = songs.value
+    let filtered = songs.value;
 
-    // Filtrar por búsqueda
-    if (searchFilter.value.trim() !== '') {
-      const searchTerm = searchFilter.value.toLowerCase().trim()
-      filtered = filtered.filter(song =>
+    if (searchFilter.value.trim() !== "") {
+      const searchTerm = searchFilter.value.toLowerCase().trim();
+      filtered = filtered.filter((song) =>
         song.name.toLowerCase().includes(searchTerm)
-      )
+      );
     }
 
-    // Ordenar alfabéticamente
     return [...filtered].sort((a, b) =>
-      a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
-    )
-  })
+      a.name.localeCompare(b.name, "es", { sensitivity: "base" })
+    );
+  });
 
-  // Cargar canciones desde Supabase o localStorage
   const loadSongs = async () => {
     if (!bandId) {
-      songs.value = []
-      return
+      songs.value = [];
+      return;
     }
 
-    loading.value = true
-    
-    // Primero intentar cargar desde Supabase si hay conexión
+    loading.value = true;
+
     if (supabase) {
       try {
         const { data, error } = await supabase
-          .from('songs')
-          .select('*')
-          .eq('band_id', bandId)
-          .order('name', { ascending: true })
+          .from("songs")
+          .select("*")
+          .eq("band_id", bandId)
+          .order("name", { ascending: true });
 
         if (!error && data) {
-          songs.value = data || []
-          // Guardar en localStorage después de cargar desde Supabase
-          saveToLocalStorage(songs.value)
-          return
+          songs.value = data || [];
+          saveToLocalStorage(songs.value);
+          return;
         }
       } catch (err) {
-        console.warn('No se pudo cargar desde Supabase, usando localStorage:', err)
+        // ...existing code...
       }
     }
 
-    // Si no hay conexión o falló, cargar desde localStorage
-    const localSongs = loadFromLocalStorage()
-    songs.value = localSongs
-    loading.value = false
-  }
+    const localSongs = loadFromLocalStorage();
+    songs.value = localSongs;
+    loading.value = false;
+  };
 
-  // Guardar nueva canción
   const saveSong = async (song) => {
     if (!bandId) {
-      console.error('No hay banda autenticada')
-      return false
+      // console.error("No hay banda autenticada");
+      return false;
     }
 
-    // Crear ID temporal para canciones sin conexión
-    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const tempId = `temp_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
     const newSong = {
       id: tempId,
       name: song.name,
@@ -100,131 +90,155 @@ export function useSongs(bandId) {
       compas: song.compas || song.timeSignature,
       band_id: bandId,
       created_at: new Date().toISOString(),
-      _pendingSync: true // Marcar como pendiente de sincronización
-    }
+      _pendingSync: true,
+    };
 
-    // Guardar inmediatamente en localStorage
-    songs.value.push(newSong)
-    saveToLocalStorage(songs.value)
+    songs.value.push(newSong);
+    saveToLocalStorage(songs.value);
 
-    // Intentar guardar en Supabase si hay conexión
     if (supabase) {
       try {
         const { data, error } = await supabase
-          .from('songs')
+          .from("songs")
           .insert([
             {
               name: song.name,
               bpm: song.bpm,
               compas: song.compas || song.timeSignature,
-              band_id: bandId
-            }
+              band_id: bandId,
+            },
           ])
           .select()
-          .single()
+          .single();
 
         if (!error && data) {
-          // Reemplazar la canción temporal con la real
-          const index = songs.value.findIndex(s => s.id === tempId)
+          const index = songs.value.findIndex((s) => s.id === tempId);
           if (index !== -1) {
-            songs.value[index] = { ...data, _pendingSync: false }
-            saveToLocalStorage(songs.value)
+            songs.value[index] = { ...data, _pendingSync: false };
+            saveToLocalStorage(songs.value);
           }
-          return true
+          return true;
         }
       } catch (err) {
-        console.warn('No se pudo guardar en Supabase, guardado solo en localStorage:', err)
-        // La canción ya está guardada en localStorage, continuar
-        return true
+        // ...existing code...
+        return true;
       }
     }
 
-    // Si no hay conexión, la canción ya está guardada en localStorage
-    return true
-  }
+    return true;
+  };
 
-  // Eliminar canción
+  const updateSong = async (songId, songData) => {
+    if (!bandId) {
+      return false;
+    }
+
+    if (!songData || !songData.name || !songData.bpm || !songData.compas) {
+      return false;
+    }
+
+    if (songData.bpm < 30 || songData.bpm > 300) {
+      return false;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("songs")
+        .update({ ...songData })
+        .eq("id", songId)
+        .select()
+        .single();
+
+      if (!error && data) {
+        const index = songs.value.findIndex((s) => s.id === songId);
+        if (index !== -1) {
+          songs.value[index] = data;
+          saveToLocalStorage(songs.value);
+        }
+        return true;
+      }
+    } catch (err) {
+      return false;
+    }
+
+    return false;
+  };
+
   const deleteSong = async (songId) => {
     if (!bandId) {
-      console.error('No hay banda autenticada')
-      return false
+      // console.error("No hay banda autenticada");
+      return false;
     }
 
-    // Eliminar inmediatamente de localStorage
-    const songIndex = songs.value.findIndex(s => s.id === songId)
+    const songIndex = songs.value.findIndex((s) => s.id === songId);
     if (songIndex !== -1) {
-      songs.value.splice(songIndex, 1)
-      saveToLocalStorage(songs.value)
+      songs.value.splice(songIndex, 1);
+      saveToLocalStorage(songs.value);
     }
 
-    // Intentar eliminar de Supabase si hay conexión y no es un ID temporal
-    if (supabase && !songId.startsWith('temp_')) {
+    if (supabase && !songId.startsWith("temp_")) {
       try {
         const { error } = await supabase
-          .from('songs')
+          .from("songs")
           .delete()
-          .eq('id', songId)
-          .eq('band_id', bandId)
+          .eq("id", songId)
+          .eq("band_id", bandId);
 
         if (error) {
-          console.warn('No se pudo eliminar de Supabase, eliminado solo de localStorage:', error)
+          // ...existing code...
         }
       } catch (err) {
-        console.warn('No se pudo eliminar de Supabase, eliminado solo de localStorage:', err)
+        // ...existing code...
       }
     }
 
-    return true
-  }
+    return true;
+  };
 
-  // Sincronizar canciones pendientes con Supabase
   const syncPendingSongs = async () => {
-    if (!supabase || !bandId) return
+    if (!supabase || !bandId) return;
 
-    const pendingSongs = songs.value.filter(s => s._pendingSync && s.id.startsWith('temp_'))
-    
+    const pendingSongs = songs.value.filter(
+      (s) => s._pendingSync && s.id.startsWith("temp_")
+    );
+
     for (const song of pendingSongs) {
       try {
         const { data, error } = await supabase
-          .from('songs')
+          .from("songs")
           .insert([
             {
               name: song.name,
               bpm: song.bpm,
               compas: song.compas,
-              band_id: bandId
-            }
+              band_id: bandId,
+            },
           ])
           .select()
-          .single()
+          .single();
 
         if (!error && data) {
-          // Reemplazar la canción temporal con la real
-          const index = songs.value.findIndex(s => s.id === song.id)
+          const index = songs.value.findIndex((s) => s.id === song.id);
           if (index !== -1) {
-            songs.value[index] = { ...data, _pendingSync: false }
+            songs.value[index] = { ...data, _pendingSync: false };
           }
         }
       } catch (err) {
-        console.warn('Error al sincronizar canción:', err)
+        // ...existing code...
       }
     }
 
-    // Guardar estado actualizado
-    saveToLocalStorage(songs.value)
-    
-    // Recargar desde Supabase para asegurar sincronización completa
-    if (pendingSongs.length > 0) {
-      await loadSongs()
-    }
-  }
+    saveToLocalStorage(songs.value);
 
-  // Detectar cuando vuelve la conexión y sincronizar
-  if (typeof window !== 'undefined') {
-    window.addEventListener('online', () => {
-      console.log('Conexión restaurada, sincronizando...')
-      syncPendingSongs()
-    })
+    if (pendingSongs.length > 0) {
+      await loadSongs();
+    }
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", () => {
+      syncPendingSongs();
+    });
   }
 
   return {
@@ -234,8 +248,8 @@ export function useSongs(bandId) {
     filteredSongs,
     loadSongs,
     saveSong,
+    updateSong,
     deleteSong,
-    syncPendingSongs
-  }
+    syncPendingSongs,
+  };
 }
-
