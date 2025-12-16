@@ -62,6 +62,7 @@ export function useSongs(bandId) {
         if (!error && data) {
           songs.value = data || [];
           saveToLocalStorage(songs.value);
+          loading.value = false;
           return;
         }
       } catch (err) {
