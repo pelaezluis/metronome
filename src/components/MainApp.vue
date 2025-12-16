@@ -96,7 +96,7 @@
         <!-- Lista de canciones -->
         <div v-if="filteredSongs.length > 0" class="space-y-3">
           <div v-for="song in filteredSongs" :key="song.id"
-            class="flex flex-col md:flex-row md:items-center md:justify-between p-3 md:p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition gap-3">
+            class="flex flex-col md:flex-row md:items-center md:justify-between p-3 md:p-4 border border-gray-200 rounded-lg shadow-md bg-white hover:bg-gray-50 transition gap-3">
             <div class="flex-1 min-w-0">
               <h3 class="font-semibold text-gray-800 text-base md:text-lg truncate">{{ song.name }}</h3>
               <p class="text-xs md:text-sm text-gray-600 mt-1">
