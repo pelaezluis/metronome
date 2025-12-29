@@ -6,13 +6,65 @@ export function useMetronome() {
   const audioContext = ref(null)
   const currentMetronome = ref(null)
 
-  const initAudioContext = () => {
+  const initAudioContext = async () => {
     if (!audioContext.value) {
       audioContext.value = new (window.AudioContext || window.webkitAudioContext)()
     }
+    // Asegurar que el AudioContext esté activo (resumir si está suspendido)
+    if (audioContext.value.state === 'suspended') {
+      await audioContext.value.resume()
+    }
   }
 
-  const play = (song, accentFirstBeat = true) => {
+  const playSound = (frequency, duration, isFirstBeat) => {
+    if (!audioContext.value) return
+
+    const currentTime = audioContext.value.currentTime
+
+    // Generar tono brillante tipo campana/triángulo
+    // Usar múltiples osciladores para crear un sonido más rico y brillante
+    const masterGain = audioContext.value.createGain()
+    masterGain.connect(audioContext.value.destination)
+    
+    // Oscilador principal con tipo triangle para sonido más brillante
+    const oscillator = audioContext.value.createOscillator()
+    const gainNode = audioContext.value.createGain()
+    
+    oscillator.connect(gainNode)
+    gainNode.connect(masterGain)
+    
+    oscillator.frequency.value = frequency
+    oscillator.type = 'triangle' // Cambiar a triangle para sonido más brillante
+    
+    // Agregar armónicos para sonido tipo campana (más brillante)
+    // Agregar un segundo oscilador con frecuencia más alta para brillo
+    const harmonicOsc = audioContext.value.createOscillator()
+    const harmonicGain = audioContext.value.createGain()
+    
+    harmonicOsc.connect(harmonicGain)
+    harmonicGain.connect(masterGain)
+    
+    harmonicOsc.frequency.value = frequency * 2.5 // Armónico más alto para brillo
+    harmonicOsc.type = 'triangle'
+    
+    // Volumen más bajo para el armónico
+    harmonicGain.gain.setValueAtTime(0.15, currentTime)
+    harmonicGain.gain.exponentialRampToValueAtTime(0.001, currentTime + duration * 0.8)
+    
+    harmonicOsc.start(currentTime)
+    harmonicOsc.stop(currentTime + duration)
+    
+    // Configurar ganancia principal
+    gainNode.gain.setValueAtTime(0.4, currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, currentTime + duration)
+    
+    masterGain.gain.setValueAtTime(0.5, currentTime)
+    
+    oscillator.start(currentTime)
+    oscillator.stop(currentTime + duration)
+  }
+
+  const play = async (song, accentFirstBeat = true) => {
     // Detener si hay uno activo
     stop()
 
@@ -20,7 +72,9 @@ export function useMetronome() {
 
     currentSong.value = song
     isPlaying.value = true
-    initAudioContext()
+    
+    // Inicializar y activar AudioContext antes de comenzar
+    await initAudioContext()
 
     // Calcular intervalo en milisegundos
     const intervalMs = (60 / song.bpm) * 1000
@@ -44,34 +98,22 @@ export function useMetronome() {
       let frequency, duration
       if (accentFirstBeat) {
         // Acento activado: primer beat diferente, resto normal
-        frequency = isFirstBeat ? 800 : 400
-        duration = isFirstBeat ? 0.1 : 0.05
+        frequency = isFirstBeat ? 1000 : 600  // Frecuencias más altas para sonido brillante
+        duration = isFirstBeat ? 0.15 : 0.08  // Duración un poco más larga
       } else {
         // Acento desactivado: todos los beats usan el sonido del acento
-        frequency = 800
-        duration = 0.1
+        frequency = 1000  // Frecuencia alta para sonido brillante
+        duration = 0.15
       }
 
-      // Generar tono
-      const oscillator = audioContext.value.createOscillator()
-      const gainNode = audioContext.value.createGain()
-
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.value.destination)
-
-      oscillator.frequency.value = frequency
-      oscillator.type = 'sine'
-
-      gainNode.gain.setValueAtTime(0.3, audioContext.value.currentTime)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.value.currentTime + duration)
-
-      oscillator.start(audioContext.value.currentTime)
-      oscillator.stop(audioContext.value.currentTime + duration)
+      // Reproducir sonido inmediatamente
+      playSound(frequency, duration, isFirstBeat)
 
       // Programar siguiente tick
       currentMetronome.value = setTimeout(tick, intervalMs)
     }
 
+    // Ejecutar el primer tick inmediatamente sin delay
     tick()
   }
 

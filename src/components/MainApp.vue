@@ -92,6 +92,40 @@
             </svg>
           </div>
         </div>
+        
+        <!-- Opción de acento en primer tiempo (único para todas las canciones) -->
+        <div class="mb-4">
+          <label class="flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 transition-all duration-200"
+            :class="accentFirstBeat 
+              ? 'bg-indigo-50 border-indigo-500 shadow-md' 
+              : 'bg-gray-50 border-gray-300 hover:border-gray-400'">
+            <div class="relative">
+              <input 
+                type="checkbox" 
+                v-model="accentFirstBeat"
+                @change="saveAccentPreference"
+                class="sr-only"
+              >
+              <div class="w-6 h-6 rounded border-2 flex items-center justify-center transition-all duration-200"
+                :class="accentFirstBeat 
+                  ? 'bg-indigo-600 border-indigo-600' 
+                  : 'bg-white border-gray-400'">
+                <svg v-if="accentFirstBeat" class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 flex-1">
+              <span class="text-lg">🎵</span>
+              <span class="text-base font-semibold" :class="accentFirstBeat ? 'text-indigo-700' : 'text-gray-700'">
+                Acento en primer tiempo
+              </span>
+            </div>
+            <div v-if="accentFirstBeat" class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium">
+              Activo
+            </div>
+          </label>
+        </div>
 
         <!-- Lista de canciones -->
         <div v-if="filteredSongs.length > 0" class="space-y-3">
@@ -113,13 +147,6 @@
                 <span v-if="isPlaying && currentSong?.id === song.id">⏸ Detener</span>
                 <span v-else>▶ Play</span>
               </button>
-              <label
-                class="flex items-center gap-1.5 cursor-pointer px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-                title="Primer tiempo diferente">
-                <input type="checkbox" v-model="accentFirstBeat" @change="saveAccentPreference"
-                  class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                <span class="text-xs text-gray-600">Acento</span>
-              </label>
               <button @click="handleEdit(song)"
                 class="px-3 md:px-4 py-2 border-2 border-blue-500 text-gray-700 rounded-lg hover:border-blue-600 hover:text-gray-900 transition text-sm md:text-base"
                 aria-label="Editar canción" title="Editar canción">
